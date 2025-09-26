@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Super Mario Style Side-Scroller</title>
+    <title>Flappy Bird Game</title>
     <style>
         body {
             margin: 0;
@@ -34,9 +34,9 @@
 <body>
     <div id="sketch-container"></div>
     <div id="instructions">
-        <strong>Controls:</strong><br>
-        A/D or ←/→: Move<br>
-        W or ↑ or Space: Jump<br>
+        <strong>Flappy Bird:</strong><br>
+        Click or Press Space to flap<br>
+        Avoid the pipes!<br>
         R: Restart
     </div>
     
@@ -45,409 +45,156 @@
     
     <script>
         // Game variables
-        let player;
-        let platforms = [];
-        let enemies = [];
-        let coins = [];
-        let camera = { x: 0, y: 0 };
+        let bird;
+        let pipes = [];
         let gameState = 'playing'; // 'playing', 'gameOver'
         let score = 0;
-        let worldWidth = 4000;
-        let jumpPressed = false; // Simple jump flag
-        let invincible = false;
-        let invincibleTimer = 0;
-        let invincibleDuration = 5000; // 5 seconds in milliseconds
+        let backgroundX = 0;
+        let pipeSpeed = 2;
+        let pipeGap = 150;
+        let pipeWidth = 60;
+        let isEagle = false;
         
-        // Player class
-        class Player {
-            constructor(x, y) {
-                this.x = x;
-                this.y = y;
+        // Bird class
+        class Bird {
+            constructor() {
+                this.x = 100;
+                this.y = height / 2;
                 this.width = 30;
-                this.height = 40;
-                this.velocityX = 0;
+                this.height = 25;
                 this.velocityY = 0;
-                this.speed = 5;
-                this.jumpPower = 12;
                 this.gravity = 0.6;
-                this.onGround = false;
-                this.facingRight = true;
-                this.canDoubleJump = false;
-                this.hasDoubleJumped = false;
+                this.jumpPower = -8;
             }
             
             update() {
-                // Handle input
-                if (keyIsDown(65) || keyIsDown(LEFT_ARROW)) { // A or Left
-                    this.velocityX = -this.speed;
-                    this.facingRight = false;
-                } else if (keyIsDown(68) || keyIsDown(RIGHT_ARROW)) { // D or Right
-                    this.velocityX = this.speed;
-                    this.facingRight = true;
-                } else {
-                    this.velocityX *= 0.8; // Friction
+                // Apply gravity (only if not eagle)
+                if (!isEagle) {
+                    this.velocityY += this.gravity;
                 }
-                
-                // Jump - simple and reliable with double jump
-                if (jumpPressed) {
-                    if (this.onGround) {
-                        // Regular jump from ground
-                        this.velocityY = -this.jumpPower;
-                        this.onGround = false;
-                        this.canDoubleJump = true;
-                        this.hasDoubleJumped = false;
-                        jumpPressed = false;
-                    } else if (this.canDoubleJump && !this.hasDoubleJumped) {
-                        // Double jump in mid-air
-                        this.velocityY = -this.jumpPower * 0.8; // Slightly weaker double jump
-                        this.hasDoubleJumped = true;
-                        jumpPressed = false;
-                    }
-                }
-                
-                // Apply gravity
-                this.velocityY += this.gravity;
-                
-                // Update position
-                this.x += this.velocityX;
                 this.y += this.velocityY;
                 
-                // Ground collision
-                if (this.y + this.height >= height - 50) {
-                    this.y = height - 50 - this.height;
+                // Keep bird in bounds
+                if (this.y > height - 50) {
+                    this.y = height - 50;
                     this.velocityY = 0;
-                    this.onGround = true;
-                    this.canDoubleJump = false; // Reset double jump when landing
-                    this.hasDoubleJumped = false;
-                } else {
-                    this.onGround = false; // Reset ground state
                 }
-                
-                // Platform collisions
-                let onPlatform = false;
-                for (let platform of platforms) {
-                    if (this.x < platform.x + platform.width &&
-                        this.x + this.width > platform.x &&
-                        this.y < platform.y + platform.height &&
-                        this.y + this.height > platform.y) {
-                        
-                        // Landing on top of platform
-                        if (this.velocityY > 0 && this.y < platform.y) {
-                            this.y = platform.y - this.height;
-                            this.velocityY = 0;
-                            onPlatform = true;
-                            this.canDoubleJump = false; // Reset double jump when landing on platform
-                            this.hasDoubleJumped = false;
-                        }
-                        // Hitting platform from below
-                        else if (this.velocityY < 0 && this.y > platform.y) {
-                            this.y = platform.y + platform.height;
-                            this.velocityY = 0;
-                        }
-                        // Hitting platform from the side
-                        else if (this.velocityX > 0 && this.x < platform.x) {
-                            this.x = platform.x - this.width;
-                            this.velocityX = 0;
-                        } else if (this.velocityX < 0 && this.x > platform.x) {
-                            this.x = platform.x + platform.width;
-                            this.velocityX = 0;
-                        }
-                    }
+                if (this.y < 0) {
+                    this.y = 0;
+                    this.velocityY = 0;
                 }
-                
-                // Update ground state - player is on ground if on main ground OR on a platform
-                this.onGround = this.onGround || onPlatform;
-                
-                // Keep player in world bounds
-                if (this.x < 0) this.x = 0;
-                if (this.x > worldWidth - this.width) this.x = worldWidth - this.width;
-                
-                // Check enemy collisions
-                for (let enemy of enemies) {
-                    // Check if player is horizontally overlapping with enemy
-                    let horizontalOverlap = this.x < enemy.x + enemy.width && this.x + this.width > enemy.x;
+            }
+            
+            jump() {
+                this.velocityY = this.jumpPower;
+            }
+            
+            draw() {
+                if (isEagle) {
+                    // Draw eagle (larger and brown)
+                    fill(139, 69, 19); // Brown
+                    ellipse(this.x, this.y, this.width + 10, this.height + 10);
                     
-                    if (horizontalOverlap) {
-                        // Check if player is jumping on enemy from above
-                        let jumpingOnEnemy = this.velocityY > 0 && 
-                                           this.y + this.height >= enemy.y + enemy.height - 2 && 
-                                           this.y + this.height <= enemy.y + enemy.height + 2;
-                        
-                        if (jumpingOnEnemy) {
-                            // Jump on enemy - kill it and bounce
-                            enemy.alive = false;
-                            this.velocityY = -8; // Bounce
-                            score += 100;
-                            
-                            // Check for star power-up at 1000 points
-                            if (score >= 1000 && !invincible) {
-                                invincible = true;
-                                invincibleTimer = millis() + invincibleDuration;
-                            }
-                        } else if (!invincible) {
-                            // Check if player is touching enemy from side/below
-                            let touchingEnemy = this.y < enemy.y + enemy.height && this.y + this.height > enemy.y;
-                            
-                            if (touchingEnemy) {
-                                // Player dies if touching enemy from side/below
-                                gameState = 'gameOver';
-                            }
-                        }
-                    }
-                }
-                
-                // Check coin collisions
-                for (let i = coins.length - 1; i >= 0; i--) {
-                    let coin = coins[i];
-                    if (this.x < coin.x + coin.size &&
-                        this.x + this.width > coin.x &&
-                        this.y < coin.y + coin.size &&
-                        this.y + this.height > coin.y) {
-                        coins.splice(i, 1);
-                        score += 50;
-                    }
-                }
-            }
-            
-            draw() {
-                push();
-                translate(-camera.x, -camera.y);
-                
-                // Draw Luigi with invincibility effect
-                if (invincible) {
-                    // Flashing effect when invincible
-                    if (Math.floor(millis() / 100) % 2 === 0) {
-                        fill(255, 255, 0); // Bright yellow when invincible
-                    } else {
-                        fill(0, 200, 0); // Luigi green
-                    }
+                    // Draw eagle eye
+                    fill(255, 255, 0); // Yellow eye
+                    ellipse(this.x + 10, this.y - 5, 8, 8);
+                    fill(0);
+                    ellipse(this.x + 10, this.y - 5, 4, 4);
+                    
+                    // Draw eagle beak
+                    fill(255, 140, 0); // Orange beak
+                    triangle(this.x + 18, this.y, this.x + 30, this.y - 5, this.x + 30, this.y + 5);
+                    
+                    // Draw eagle wings (larger)
+                    fill(101, 67, 33); // Darker brown
+                    ellipse(this.x - 8, this.y + 5, 25, 15);
+                    ellipse(this.x + 8, this.y + 5, 25, 15);
+                    
+                    // Draw eagle talons
+                    fill(0);
+                    line(this.x - 5, this.y + 15, this.x - 8, this.y + 20);
+                    line(this.x, this.y + 15, this.x, this.y + 20);
+                    line(this.x + 5, this.y + 15, this.x + 8, this.y + 20);
                 } else {
-                    fill(0, 200, 0); // Luigi green
+                    // Draw bird body
+                    fill(255, 255, 0); // Yellow
+                    ellipse(this.x, this.y, this.width, this.height);
+                    
+                    // Draw bird eye
+                    fill(0);
+                    ellipse(this.x + 8, this.y - 5, 6, 6);
+                    
+                    // Draw bird beak
+                    fill(255, 165, 0); // Orange
+                    triangle(this.x + 15, this.y, this.x + 25, this.y - 3, this.x + 25, this.y + 3);
+                    
+                    // Draw bird wing
+                    fill(255, 200, 0);
+                    ellipse(this.x - 5, this.y + 5, 15, 10);
                 }
-                
-                // Luigi's body
-                rect(this.x, this.y, this.width, this.height);
-                
-                // Luigi's overalls (blue)
-                fill(0, 0, 255);
-                rect(this.x + 5, this.y + 20, this.width - 10, this.height - 20);
-                
-                // Overall straps
-                fill(0, 0, 255);
-                rect(this.x + 5, this.y + 5, 8, 15);
-                rect(this.x + this.width - 13, this.y + 5, 8, 15);
-                
-                // Luigi's face (skin color)
-                fill(255, 200, 150);
-                rect(this.x + 5, this.y + 5, this.width - 10, 15);
-                
-                // Luigi's mustache
-                fill(0);
-                rect(this.x + 8, this.y + 12, 6, 3);
-                rect(this.x + this.width - 14, this.y + 12, 6, 3);
-                
-                // Luigi's eyes
-                fill(0);
-                if (this.facingRight) {
-                    ellipse(this.x + 20, this.y + 8, 6, 6); // Right eye
-                } else {
-                    ellipse(this.x + 10, this.y + 8, 6, 6); // Left eye
-                }
-                
-                // Luigi's hat (green with L)
-                fill(0, 150, 0);
-                rect(this.x + 2, this.y - 5, this.width - 4, 10);
-                
-                // L on hat
-                fill(255);
-                textAlign(CENTER, CENTER);
-                textSize(12);
-                text('L', this.x + this.width/2, this.y + 2);
-                
-                // Draw star above head when invincible
-                if (invincible) {
-                    fill(255, 255, 0); // Gold star
-                    push();
-                    translate(this.x + this.width/2, this.y - 15);
-                    rotate(millis() * 0.01); // Rotating star
-                    star(0, 0, 8, 4, 5);
-                    pop();
-                }
-                
-                pop();
             }
         }
         
-        // Platform class
-        class Platform {
-            constructor(x, y, w, h) {
+        // Pipe class
+        class Pipe {
+            constructor(x) {
                 this.x = x;
-                this.y = y;
-                this.width = w;
-                this.height = h;
-            }
-            
-            draw() {
-                push();
-                translate(-camera.x, -camera.y);
-                fill(139, 69, 19); // Brown
-                rect(this.x, this.y, this.width, this.height);
-                pop();
-            }
-        }
-        
-        // Enemy class
-        class Enemy {
-            constructor(x, y) {
-                this.x = x;
-                this.y = y;
-                this.width = 25;
-                this.height = 40; // Made taller
-                this.velocityX = -1;
-                this.alive = true;
+                this.topHeight = random(100, height - pipeGap - 100);
+                this.bottomY = this.topHeight + pipeGap;
+                this.width = pipeWidth;
+                this.passed = false;
             }
             
             update() {
-                if (!this.alive) return;
+                this.x -= pipeSpeed;
+            }
+            
+            draw() {
+                // Draw top pipe
+                fill(0, 150, 0); // Green
+                rect(this.x, 0, this.width, this.topHeight);
                 
-                this.x += this.velocityX;
+                // Draw bottom pipe
+                rect(this.x, this.bottomY, this.width, height - this.bottomY);
                 
-                // Turn around at edges or platforms
-                let turnAround = false;
-                
-                // Check if at edge of platform
-                for (let platform of platforms) {
-                    if (this.y + this.height >= platform.y &&
-                        this.y + this.height <= platform.y + 10) {
-                        if (this.velocityX > 0 && this.x + this.width >= platform.x + platform.width) {
-                            turnAround = true;
-                        } else if (this.velocityX < 0 && this.x <= platform.x) {
-                            turnAround = true;
-                        }
+                // Draw pipe caps
+                fill(0, 200, 0); // Darker green
+                rect(this.x - 5, this.topHeight - 20, this.width + 10, 20);
+                rect(this.x - 5, this.bottomY, this.width + 10, 20);
+            }
+            
+            checkCollision(bird) {
+                // Check if bird is horizontally aligned with pipe
+                if (bird.x + bird.width/2 > this.x && bird.x - bird.width/2 < this.x + this.width) {
+                    // Check if bird hits top or bottom pipe
+                    if (bird.y - bird.height/2 < this.topHeight || bird.y + bird.height/2 > this.bottomY) {
+                        return true;
                     }
                 }
-                
-                // Turn around at world edges
-                if (this.x <= 0 || this.x >= worldWidth - this.width) {
-                    turnAround = true;
+                return false;
+            }
+            
+            checkScore(bird) {
+                // Check if bird passed the pipe
+                if (!this.passed && bird.x > this.x + this.width) {
+                    this.passed = true;
+                    return true;
                 }
-                
-                if (turnAround) {
-                    this.velocityX *= -1;
-                }
+                return false;
             }
-            
-            draw() {
-                if (!this.alive) return;
-                
-                push();
-                translate(-camera.x, -camera.y);
-                fill(255, 0, 0); // Red
-                rect(this.x, this.y, this.width, this.height);
-                
-                // Eyes
-                fill(255);
-                ellipse(this.x + 8, this.y + 8, 6, 6);
-                ellipse(this.x + 17, this.y + 8, 6, 6);
-                fill(0);
-                ellipse(this.x + 8, this.y + 8, 3, 3);
-                ellipse(this.x + 17, this.y + 8, 3, 3);
-                pop();
-            }
-        }
-        
-        // Coin class
-        class Coin {
-            constructor(x, y) {
-                this.x = x;
-                this.y = y;
-                this.size = 15;
-                this.rotation = 0;
-            }
-            
-            update() {
-                this.rotation += 0.1;
-            }
-            
-            draw() {
-                push();
-                translate(-camera.x, -camera.y);
-                translate(this.x + this.size/2, this.y + this.size/2);
-                rotate(this.rotation);
-                
-                fill(255, 215, 0); // Gold
-                ellipse(0, 0, this.size, this.size);
-                
-                fill(255, 255, 0); // Bright yellow center
-                ellipse(0, 0, this.size * 0.6, this.size * 0.6);
-                pop();
-            }
-        }
-        
-        // Star drawing function
-        function star(x, y, radius1, radius2, npoints) {
-            let angle = TWO_PI / npoints;
-            let halfAngle = angle / 2.0;
-            beginShape();
-            for (let a = 0; a < TWO_PI; a += angle) {
-                let sx = x + cos(a) * radius2;
-                let sy = y + sin(a) * radius2;
-                vertex(sx, sy);
-                sx = x + cos(a + halfAngle) * radius1;
-                sy = y + sin(a + halfAngle) * radius1;
-                vertex(sx, sy);
-            }
-            endShape(CLOSE);
         }
         
         function setup() {
             let canvas = createCanvas(800, 600);
             canvas.parent('sketch-container');
             
-            // Create player
-            player = new Player(100, height - 100);
+            // Create bird
+            bird = new Bird();
             
-            // Create platforms
-            platforms = [
-                new Platform(200, height - 150, 200, 20),
-                new Platform(500, height - 200, 150, 20),
-                new Platform(800, height - 250, 200, 20),
-                new Platform(1200, height - 300, 150, 20),
-                new Platform(1500, height - 200, 200, 20),
-                new Platform(1800, height - 150, 150, 20),
-                new Platform(2200, height - 250, 200, 20),
-                new Platform(2600, height - 300, 150, 20),
-                new Platform(3000, height - 200, 200, 20),
-                new Platform(3400, height - 150, 150, 20)
-            ];
-            
-            // Create enemies (adjusted for taller height)
-            enemies = [
-                new Enemy(300, height - 190), // Adjusted for taller enemies
-                new Enemy(600, height - 240),
-                new Enemy(900, height - 290),
-                new Enemy(1300, height - 340),
-                new Enemy(1600, height - 240),
-                new Enemy(1900, height - 190),
-                new Enemy(2300, height - 290),
-                new Enemy(2700, height - 340),
-                new Enemy(3100, height - 240),
-                new Enemy(3500, height - 190)
-            ];
-            
-            // Create coins
-            coins = [
-                new Coin(250, height - 200),
-                new Coin(550, height - 250),
-                new Coin(850, height - 300),
-                new Coin(1250, height - 350),
-                new Coin(1550, height - 250),
-                new Coin(1850, height - 200),
-                new Coin(2250, height - 300),
-                new Coin(2650, height - 350),
-                new Coin(3050, height - 250),
-                new Coin(3450, height - 200)
-            ];
+            // Create initial pipes
+            for (let i = 0; i < 3; i++) {
+                pipes.push(new Pipe(width + i * 300));
+            }
         }
         
         function draw() {
@@ -460,65 +207,62 @@
             }
             
             if (gameState === 'playing') {
-                // Update invincibility timer
-                if (invincible && millis() >= invincibleTimer) {
-                    invincible = false;
+                // Update bird
+                bird.update();
+                
+                // Update pipes
+                for (let i = pipes.length - 1; i >= 0; i--) {
+                    pipes[i].update();
+                    
+                    // Check collision
+                    if (pipes[i].checkCollision(bird)) {
+                        gameState = 'gameOver';
+                    }
+                    
+                    // Check score
+                    if (pipes[i].checkScore(bird)) {
+                        score++;
+                        
+                        // Transform to eagle at 10 points
+                        if (score >= 10 && !isEagle) {
+                            isEagle = true;
+                        }
+                    }
+                    
+                    // Remove pipes that are off screen
+                    if (pipes[i].x + pipes[i].width < 0) {
+                        pipes.splice(i, 1);
+                    }
                 }
                 
-                // Update game objects
-                player.update();
-                
-                for (let enemy of enemies) {
-                    enemy.update();
+                // Add new pipes
+                if (pipes.length < 3) {
+                    pipes.push(new Pipe(width));
                 }
                 
-                for (let coin of coins) {
-                    coin.update();
+                // Draw pipes
+                for (let pipe of pipes) {
+                    pipe.draw();
                 }
                 
-                // Update camera to follow player
-                camera.x = player.x - width/2;
-                camera.x = constrain(camera.x, 0, worldWidth - width);
+                // Draw bird
+                bird.draw();
                 
                 // Draw ground
-                push();
-                translate(-camera.x, -camera.y);
                 fill(34, 139, 34); // Forest green
-                rect(0, height - 50, worldWidth, 50);
-                pop();
+                rect(0, height - 50, width, 50);
                 
-                // Draw platforms
-                for (let platform of platforms) {
-                    platform.draw();
-                }
-                
-                // Draw enemies
-                for (let enemy of enemies) {
-                    enemy.draw();
-                }
-                
-                // Draw coins
-                for (let coin of coins) {
-                    coin.draw();
-                }
-                
-                // Draw player
-                player.draw();
-                
-                // Draw UI
+                // Draw score
                 fill(255);
-                textAlign(LEFT);
-                textSize(20);
-                text('Score: ' + score, 20, 40);
-                text('Jump Pressed: ' + jumpPressed, 20, 70);
-                text('On Ground: ' + player.onGround, 20, 100);
-                text('Can Double Jump: ' + player.canDoubleJump, 20, 130);
-                text('Has Double Jumped: ' + player.hasDoubleJumped, 20, 160);
+                textAlign(CENTER);
+                textSize(32);
+                text(score, width/2, 50);
                 
-                // Show invincibility status
-                if (invincible) {
-                    let timeLeft = Math.ceil((invincibleTimer - millis()) / 1000);
-                    text('INVINCIBLE! Time: ' + timeLeft + 's', 20, 190);
+                // Show eagle status
+                if (isEagle) {
+                    fill(255, 255, 0);
+                    textSize(20);
+                    text('EAGLE MODE!', width/2, 80);
                 }
                 
             } else if (gameState === 'gameOver') {
@@ -535,51 +279,31 @@
             }
         }
         
+        function mousePressed() {
+            if (gameState === 'playing') {
+                bird.jump();
+            }
+        }
+        
         function keyPressed() {
-            // Handle jump keys
-            if (key === 'w' || key === 'W' || key === ' ' || keyCode === UP_ARROW) {
-                jumpPressed = true;
+            if (key === ' ' && gameState === 'playing') {
+                bird.jump();
             }
             
             if (key === 'r' || key === 'R') {
                 // Restart game
                 gameState = 'playing';
                 score = 0;
-                player = new Player(100, height - 100);
-                camera = { x: 0, y: 0 };
-                invincible = false;
-                invincibleTimer = 0;
+                bird = new Bird();
+                pipes = [];
+                isEagle = false;
                 
-                // Reset enemies (adjusted for taller height)
-                enemies = [
-                    new Enemy(300, height - 190),
-                    new Enemy(600, height - 240),
-                    new Enemy(900, height - 290),
-                    new Enemy(1300, height - 340),
-                    new Enemy(1600, height - 240),
-                    new Enemy(1900, height - 190),
-                    new Enemy(2300, height - 290),
-                    new Enemy(2700, height - 340),
-                    new Enemy(3100, height - 240),
-                    new Enemy(3500, height - 190)
-                ];
-                
-                // Reset coins
-                coins = [
-                    new Coin(250, height - 200),
-                    new Coin(550, height - 250),
-                    new Coin(850, height - 300),
-                    new Coin(1250, height - 350),
-                    new Coin(1550, height - 250),
-                    new Coin(1850, height - 200),
-                    new Coin(2250, height - 300),
-                    new Coin(2650, height - 350),
-                    new Coin(3050, height - 250),
-                    new Coin(3450, height - 200)
-                ];
+                // Create initial pipes
+                for (let i = 0; i < 3; i++) {
+                    pipes.push(new Pipe(width + i * 300));
+                }
             }
         }
-        
     </script>
 </body>
 </html>
